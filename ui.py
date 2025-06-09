@@ -9,9 +9,9 @@ class SecureChatApp:
     def __init__(self, master):
         self.master = master
         self.master.title("Secure Chat Receiver")
-        self.master.geometry("1000x700")
+        self.master.geometry("1200x800")
         self.master.configure(bg="#f0f2f5")
-        self.master.minsize(800, 600)
+        self.master.minsize(1000, 700)
         
         # Configure styles
         self.style = ttk.Style()
@@ -30,8 +30,9 @@ class SecureChatApp:
         self.message_queue = queue.Queue()
         self.master.after(100, self.process_queue)
         
-        # Message graph
-        self.message_graph = MessageGraph(self.graph_frame)
+        # Message graphs
+        self.topic1_graph = MessageGraph(self.topic1_graph_frame)
+        self.topic2_graph = MessageGraph(self.topic2_graph_frame)
 
     def _configure_styles(self):
         self.style.configure("Header.TLabel", 
@@ -73,6 +74,9 @@ class SecureChatApp:
                             background="white", 
                             borderwidth=1, 
                             relief="sunken")
+        
+        self.style.configure("TopicTab.TFrame", background="#ffffff", padding=5)
+        self.style.configure("TopicLabel.TLabel", font=("Segoe UI", 10, "bold"))
 
     def _create_header(self):
         header_frame = ttk.Frame(self.master)
@@ -91,13 +95,18 @@ class SecureChatApp:
         ttk.Label(conn_frame, text="WebSocket Server:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         self.server_entry = ttk.Entry(conn_frame, width=40, font=("Segoe UI", 10))
         self.server_entry.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
-        self.server_entry.insert(0, "ws://10.170.91.131:8887")
+        self.server_entry.insert(0, "ws://192.168.176.131:8887")
         
-        # Topic subscription
-        ttk.Label(conn_frame, text="Subscribe Topic:").grid(row=0, column=2, sticky="w", padx=(20, 5), pady=5)
-        self.topic_entry = ttk.Entry(conn_frame, width=20, font=("Segoe UI", 10))
-        self.topic_entry.grid(row=0, column=3, sticky="ew", padx=5, pady=5)
-        self.topic_entry.insert(0, "test/topic")
+        # Topic subscriptions
+        ttk.Label(conn_frame, text="Topic 1:").grid(row=0, column=2, sticky="w", padx=(20, 5), pady=5)
+        self.topic1_entry = ttk.Entry(conn_frame, width=20, font=("Segoe UI", 10))
+        self.topic1_entry.grid(row=0, column=3, sticky="ew", padx=5, pady=5)
+        self.topic1_entry.insert(0, "sensor/temperature")
+        
+        ttk.Label(conn_frame, text="Topic 2:").grid(row=0, column=4, sticky="w", padx=(20, 5), pady=5)
+        self.topic2_entry = ttk.Entry(conn_frame, width=20, font=("Segoe UI", 10))
+        self.topic2_entry.grid(row=0, column=5, sticky="ew", padx=5, pady=5)
+        self.topic2_entry.insert(0, "sensor/humidity")
         
         # Status indicator
         ttk.Label(conn_frame, text="Status:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
@@ -106,7 +115,7 @@ class SecureChatApp:
         
         # Key information
         key_frame = ttk.Frame(conn_frame)
-        key_frame.grid(row=2, column=0, columnspan=4, sticky="ew", pady=10)
+        key_frame.grid(row=2, column=0, columnspan=6, sticky="ew", pady=10)
         
         ttk.Label(key_frame, text="Shared Key:").pack(side="left", padx=(0, 5))
         self.shared_key_label = ttk.Label(key_frame, text="Not established", style="KeyInfo.TLabel")
@@ -144,39 +153,81 @@ class SecureChatApp:
         self.copy_btn.pack(side="right", padx=5)
 
     def _create_main_content(self):
-        """Create main content area with message display and graph"""
+        """Create main content area with dual topic displays"""
         main_frame = ttk.Frame(self.master)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
+        # Create notebook for topic tabs
+        self.notebook = ttk.Notebook(main_frame)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+        
+        # Topic 1 tab
+        topic1_frame = ttk.Frame(self.notebook, style="TopicTab.TFrame")
+        self.notebook.add(topic1_frame, text="Topic 1")
+        self._create_topic_content(topic1_frame, 1)
+        
+        # Topic 2 tab
+        topic2_frame = ttk.Frame(self.notebook, style="TopicTab.TFrame")
+        self.notebook.add(topic2_frame, text="Topic 2")
+        self._create_topic_content(topic2_frame, 2)
+
+    def _create_topic_content(self, parent_frame, topic_num):
+        """Create content for a single topic tab"""
+        # Topic label
+        topic_label = ttk.Label(parent_frame, 
+                              text=f"Topic {topic_num} Messages", 
+                              style="TopicLabel.TLabel")
+        topic_label.pack(fill="x", padx=10, pady=5)
+        
         # Create paned window for resizable split
-        paned_window = ttk.PanedWindow(main_frame, orient=tk.HORIZONTAL)
-        paned_window.pack(fill=tk.BOTH, expand=True)
+        paned_window = ttk.PanedWindow(parent_frame, orient=tk.HORIZONTAL)
+        paned_window.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
         # Message frame (left side)
-        msg_frame = ttk.LabelFrame(paned_window, text="Received Messages", style="MessageFrame.TLabelframe", padding=10)
-        paned_window.add(msg_frame, weight=3)  # 60% width
+        msg_frame = ttk.LabelFrame(paned_window, 
+                                 text="Messages", 
+                                 style="MessageFrame.TLabelframe", 
+                                 padding=10)
+        paned_window.add(msg_frame, weight=2)  # 60% width
         
-        self.text_area = tk.Text(msg_frame, 
-                                wrap='word', 
-                                font=("Consolas", 10),
-                                bg="white", 
-                                fg="#333333",
-                                padx=10,
-                                pady=10,
-                                relief="flat",
-                                highlightbackground="#cccccc",
-                                highlightthickness=1)
-        self.text_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Create text area for this topic
+        text_area = tk.Text(msg_frame, 
+                           wrap='word', 
+                           font=("Consolas", 10),
+                           bg="white", 
+                           fg="#333333",
+                           padx=10,
+                           pady=10,
+                           relief="flat",
+                           highlightbackground="#cccccc",
+                           highlightthickness=1)
+        text_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
-        scrollbar = ttk.Scrollbar(msg_frame, command=self.text_area.yview)
+        scrollbar = ttk.Scrollbar(msg_frame, command=text_area.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.text_area.config(yscrollcommand=scrollbar.set)
-        self.text_area.config(state=tk.DISABLED)
+        text_area.config(yscrollcommand=scrollbar.set)
+        text_area.config(state=tk.DISABLED)
+        
+        # Store reference to text area
+        if topic_num == 1:
+            self.topic1_text_area = text_area
+        else:
+            self.topic2_text_area = text_area
         
         # Graph frame (right side)
-        self.graph_frame = ttk.LabelFrame(paned_window, text="Message Frequency", style="MessageFrame.TLabelframe", padding=10)
-        paned_window.add(self.graph_frame, weight=2)  # 40% width
-
+        graph_frame = ttk.LabelFrame(paned_window, 
+                                   text="Message Values", 
+                                   style="MessageFrame.TLabelframe", 
+                                   padding=10)
+        paned_window.add(graph_frame, weight=1)  # 40% width
+        
+        # Store reference to graph frame
+        if topic_num == 1:
+            self.topic1_graph_frame = graph_frame
+        else:
+            self.topic2_graph_frame = graph_frame
+    
+    
     def _create_message_area(self):
         msg_frame = ttk.LabelFrame(self.master, text="Received Messages", style="MessageFrame.TLabelframe", padding=10)
         msg_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
@@ -198,6 +249,7 @@ class SecureChatApp:
         self.text_area.config(yscrollcommand=scrollbar.set)
         self.text_area.config(state=tk.DISABLED)
 
+
     def _create_status_bar(self):
         self.status_bar = ttk.Label(self.master, 
                                   text="Ready", 
@@ -213,31 +265,76 @@ class SecureChatApp:
         self.shared_key_label.config(text=shared_key[:24] + "..." if shared_key else "Not established")
         self.aes_iv_label.config(text=aes_iv[:24] + "..." if aes_iv else "Not established")
 
-    def display_message(self, message):
-        self.text_area.config(state=tk.NORMAL)
-        self.text_area.insert(tk.END, message + '\n')
-        self.text_area.see(tk.END)
-        self.text_area.config(state=tk.DISABLED)
+    def display_message(self, topic, message):
+        """Display message in the appropriate topic tab"""
+        if topic == 1:
+            text_area = self.topic1_text_area
+            graph = self.topic1_graph
+        else:
+            text_area = self.topic2_text_area
+            graph = self.topic2_graph
+            
+        text_area.config(state=tk.NORMAL)
+        text_area.insert(tk.END, message + '\n')
+        text_area.see(tk.END)
+        text_area.config(state=tk.DISABLED)
         
-        # Update graph with new message
-        if "Decrypted" in message or "Raw Message" in message:
-            self.message_graph.add_data_point()
+        # Try to parse numeric value for graphing
+        try:
+            # Extract the numeric part after the colon
+            value_part = message.split(":", 1)[1].strip() if ":" in message else message
+            numeric_value = float(value_part)
+            graph.add_data_point(numeric_value)
+        except (ValueError, IndexError):
+            # Not a numeric value, skip graphing
+            pass
 
     def clear_messages(self):
-        self.text_area.config(state=tk.NORMAL)
-        self.text_area.delete(1.0, tk.END)
-        self.text_area.config(state=tk.DISABLED)
-        self.status_bar.config(text="Messages cleared")
+        """Clear all messages and graphs"""
+        # Clear topic 1
+        self.topic1_text_area.config(state=tk.NORMAL)
+        self.topic1_text_area.delete(1.0, tk.END)
+        self.topic1_text_area.config(state=tk.DISABLED)
+        self.topic1_graph.reset()
+        
+        # Clear topic 2
+        self.topic2_text_area.config(state=tk.NORMAL)
+        self.topic2_text_area.delete(1.0, tk.END)
+        self.topic2_text_area.config(state=tk.DISABLED)
+        self.topic2_graph.reset()
+        
+        self.status_bar.config(text="All messages cleared")
 
     def copy_all(self):
+        """Copy all messages from both topics to clipboard"""
+        all_messages = ""
+        
+        # Get topic 1 messages
+        self.topic1_text_area.config(state=tk.NORMAL)
+        all_messages += "=== Topic 1 ===\n"
+        all_messages += self.topic1_text_area.get(1.0, tk.END)
+        self.topic1_text_area.config(state=tk.DISABLED)
+        
+        # Get topic 2 messages
+        self.topic2_text_area.config(state=tk.NORMAL)
+        all_messages += "\n=== Topic 2 ===\n"
+        all_messages += self.topic2_text_area.get(1.0, tk.END)
+        self.topic2_text_area.config(state=tk.DISABLED)
+        
         self.master.clipboard_clear()
-        self.master.clipboard_append(self.text_area.get(1.0, tk.END))
-        self.status_bar.config(text="Messages copied to clipboard")
+        self.master.clipboard_append(all_messages)
+        self.status_bar.config(text="All messages copied to clipboard")
 
     def process_queue(self):
         while not self.message_queue.empty():
             message = self.message_queue.get()
-            self.display_message(message)
+            if isinstance(message, tuple) and len(message) == 2:
+                topic, content = message
+                self.display_message(topic, content)
+            else:
+                # Display in both tabs for system messages
+                self.display_message(1, message)
+                self.display_message(2, message)
         self.master.after(100, self.process_queue)
 
     def connect_websocket(self):
@@ -245,8 +342,15 @@ class SecureChatApp:
             return
 
         server_url = self.server_entry.get().strip()
+        topic1 = self.topic1_entry.get().strip()
+        topic2 = self.topic2_entry.get().strip()
+        
         if not server_url:
             messagebox.showerror("Error", "Please enter a valid WebSocket URL")
+            return
+            
+        if not topic1 or not topic2:
+            messagebox.showerror("Error", "Please enter both topics")
             return
 
         self.update_status("Connecting...", "#f39c12")
@@ -255,7 +359,8 @@ class SecureChatApp:
             message_queue=self.message_queue,
             status_callback=self.update_status,
             key_callback=self.update_key_info,
-            topic=self.topic_entry.get().strip()
+            topic1=topic1,
+            topic2=topic2
         )
         
         self.ws_thread = threading.Thread(target=self.ws_client.run)
@@ -266,6 +371,12 @@ class SecureChatApp:
         self.disconnect_btn.config(state=tk.NORMAL)
 
     def disconnect_websocket(self):
+        if self.ws_client and self.ws_client.is_connected:
+            self.ws_client.close()
+            self.update_status("Disconnected", "#e74c3c")
+            self.message_queue.put("[WebSocket Connection Closed]")
+            self.connect_btn.config(state=tk.NORMAL)
+            self.disconnect_btn.config(state=tk.DISABLED)
         if self.ws_client and self.ws_client.is_connected:
             self.ws_client.close()
             self.update_status("Disconnected", "#e74c3c")

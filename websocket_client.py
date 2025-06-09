@@ -1,14 +1,18 @@
 from websocket import WebSocketApp
 import threading
 from crypto import CryptoHandler
+import logging
+
+logger = logging.getLogger(__name__)
 
 class WebSocketClient:
-    def __init__(self, url, message_queue, status_callback, key_callback, topic):
+    def __init__(self, url, message_queue, status_callback, key_callback, topic1, topic2):
         self.url = url
         self.message_queue = message_queue
         self.status_callback = status_callback
         self.key_callback = key_callback
-        self.topic = topic
+        self.topic1 = topic1
+        self.topic2 = topic2
         self.ws = None
         self.is_connected = False
         self.crypto = CryptoHandler()
@@ -40,14 +44,18 @@ class WebSocketClient:
         try:
             if message.startswith("p:"):
                 self.crypto.p = int(message[2:].strip())
+                self.message_queue.put("[Received DH parameter 'p']")
             
             elif message.startswith("g:"):
                 self.crypto.g = int(message[2:].strip())
+                self.message_queue.put("[Received DH parameter 'g']")
                 public_key = self.crypto.generate_public_key(self.crypto.p, self.crypto.g)
                 ws.send(f"start-dh:{str(public_key)}")
+                self.message_queue.put("[Sent public key for key exchange]")
 
             elif message.startswith("dh-server-pub:"):
                 server_pub_key = int(message[14:].strip())
+                self.message_queue.put("[Received server public key]")
                 shared_key, aes_iv = self.crypto.generate_shared_secret(
                     self.crypto.p, server_pub_key
                 )
@@ -58,12 +66,31 @@ class WebSocketClient:
                 )
                 self.message_queue.put("[Key Exchange Successful]")
                 
-                # Subscribe to user-specified topic
-                ws.send(f"subscribe:{self.topic}")
+                # Subscribe to both topics
+                ws.send(f"subscribe:{self.topic1}")
+                ws.send(f"subscribe:{self.topic2}")
+                self.message_queue.put(f"[Subscribed to topics: '{self.topic1}', '{self.topic2}']")
 
             elif message.startswith("data:"):
-                decrypted = self.crypto.decrypt_aes_128_cbc(message[5:].strip())
-                self.message_queue.put(f"[Decrypted]: {decrypted}")
+                # Format: "data: topic <base64-encrypted-data>"
+                parts = message.split(" ", 2)
+                if len(parts) < 3:
+                    self.message_queue.put(f"[ERROR] Invalid message format: {message}")
+                    return
+                    
+                topic_received = parts[1].strip()
+                encrypted_data = parts[2].strip()
+                
+                # Decrypt the message
+                decrypted = self.crypto.decrypt_aes_128_cbc(encrypted_data)
+                
+                # Determine which topic this belongs to
+                if topic_received == self.topic1:
+                    self.message_queue.put((1, f"{topic_received}: {decrypted}"))
+                elif topic_received == self.topic2:
+                    self.message_queue.put((2, f"{topic_received}: {decrypted}"))
+                else:
+                    self.message_queue.put(f"[WARNING] Received message for unknown topic: {topic_received}")
             else:
                 self.message_queue.put(f"[Raw Message]: {message}")
         except Exception as e:
