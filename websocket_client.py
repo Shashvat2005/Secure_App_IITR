@@ -67,9 +67,16 @@ class WebSocketClient:
                 self.message_queue.put("[Key Exchange Successful]")
                 
                 # Subscribe to both topics
-                ws.send(f"subscribe:{self.topic1}")
-                ws.send(f"subscribe:{self.topic2}")
-                self.message_queue.put(f"[Subscribed to topics: '{self.topic1}', '{self.topic2}']")
+                if self.topic1 and self.topic2:
+                    ws.send(f"subscribe:{self.topic1}")
+                    ws.send(f"subscribe:{self.topic2}")
+                    self.message_queue.put(f"[Subscribed to topics: '{self.topic1}', '{self.topic2}']")
+                elif self.topic1:
+                    ws.send(f"subscribe:{self.topic1}")
+                    self.message_queue.put(f"[Subscribed to topic: '{self.topic1}']")
+                elif self.topic2:
+                    ws.send(f"subscribe:{self.topic2}")
+                    self.message_queue.put(f"[Subscribed to topic: '{self.topic2}']")
 
             elif message.startswith("data:"):
                 # Format: "data: topic <base64-encrypted-data>"

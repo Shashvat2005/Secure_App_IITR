@@ -95,7 +95,7 @@ class SecureChatApp:
         ttk.Label(conn_frame, text="WebSocket Server:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         self.server_entry = ttk.Entry(conn_frame, width=40, font=("Segoe UI", 10))
         self.server_entry.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
-        self.server_entry.insert(0, "ws://192.168.176.131:8887")
+        self.server_entry.insert(0, "ws://192.168.68.131:8887")
         
         # Topic subscriptions
         ttk.Label(conn_frame, text="Topic 1:").grid(row=0, column=2, sticky="w", padx=(20, 5), pady=5)
@@ -349,9 +349,9 @@ class SecureChatApp:
             messagebox.showerror("Error", "Please enter a valid WebSocket URL")
             return
             
-        if not topic1 or not topic2:
-            messagebox.showerror("Error", "Please enter both topics")
-            return
+        # if not topic1 or not topic2:
+        #     messagebox.showerror("Error", "Please enter both topics")
+        #     return
 
         self.update_status("Connecting...", "#f39c12")
         self.ws_client = WebSocketClient(
