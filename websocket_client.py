@@ -2,20 +2,92 @@ from websocket import WebSocketApp
 import threading
 from crypto import CryptoHandler
 import logging
+import tkinter as tk
 
 logger = logging.getLogger(__name__)
 
+Topic1 = None
+Topic2 = None
+flag1 = False
+flag2 = False
+
 class WebSocketClient:
-    def __init__(self, url, message_queue, status_callback, key_callback, topic1, topic2):
+    def __init__(self, url, message_queue, status_callback, key_callback):
         self.url = url
         self.message_queue = message_queue
         self.status_callback = status_callback
         self.key_callback = key_callback
-        self.topic1 = topic1
-        self.topic2 = topic2
         self.ws = None
         self.is_connected = False
         self.crypto = CryptoHandler()
+        self.topic1 = None
+        self.topic2 = None
+
+    def subscribe(self, topic, no):
+        """Subscribe to a topic"""
+        global Topic1, Topic2, flag1, flag2
+
+        if no == 1:
+            self.topic1 = topic
+            if flag1 and Topic2 != topic:
+                self.ws.send(f"unsubscribe:{Topic1}")
+                self.message_queue.put((no, f"[Unsubscribed to topic: '{Topic1}']"))
+                print(f"Unsubscribed to topic 1: {Topic1}")
+                if topic:
+                    self.ws.send(f"subscribe:{topic}")
+                    self.message_queue.put((no, f"[Subscribed to topic: '{topic}']"))
+                    print(f"Subscribed to topic: {topic}")
+                    flag1 = True
+                    Topic1 = topic
+                else:
+                    self.message_queue.put((no, "[ERROR] No topic provided for subscription"))
+                    
+            elif flag2 and Topic2 == topic:
+                self.message_queue.put((1,f"[ERROR] Cannot subscribe to the same topic twice: {topic}"))
+            elif not flag1:
+                if topic:
+                    self.ws.send(f"subscribe:{topic}")
+                    self.message_queue.put((no, f"[Subscribed to topic: '{topic}']"))
+                    print(f"Subscribed to topic: {topic}")
+                    flag1 = True
+                    Topic1 = topic
+                else:
+                    self.message_queue.put((no, "[ERROR] No topic provided for subscription"))
+            
+
+        elif no == 2:
+            self.topic2 = topic
+            if flag2 and Topic1 != topic:
+                self.ws.send(f"unsubscribe:{Topic2}")
+                print(f"Unsubscribed to topic 2: {Topic2}")
+                self.message_queue.put((no, f"[Unsubscribed to topic: '{Topic2}']"))
+                if topic:
+                    self.ws.send(f"subscribe:{topic}")
+                    self.message_queue.put((no, f"[Subscribed to topic: '{topic}']"))
+                    print(f"Subscribed to topic: {topic}")
+                    flag2 = True
+                    Topic2 = topic
+                else:
+                    self.message_queue.put((no, "[ERROR] No topic provided for subscription"))
+            elif flag1 and Topic1 == topic:
+                self.message_queue.put((2,f"[ERROR] Cannot subscribe to the same topic twice: {topic}"))
+                
+            elif not flag2:
+                if topic:
+                    self.ws.send(f"subscribe:{topic}")
+                    self.message_queue.put((no, f"[Subscribed to topic: '{topic}']"))
+                    print(f"Subscribed to topic: {topic}")
+                    flag2 = True
+                    Topic2 = topic
+                else:
+                    self.message_queue.put((no, "[ERROR] No topic provided for subscription"))
+        
+
+        if not self.is_connected:
+            self.message_queue.put("[ERROR] Not connected to WebSocket server")
+            return
+        
+        
         
     def run(self):
         """Start the WebSocket connection"""
@@ -41,6 +113,8 @@ class WebSocketClient:
 
     def _on_message(self, ws, message):
         """Handle incoming messages"""
+
+        global Topic2, Topic1
         try:
             if message.startswith("p:"):
                 self.crypto.p = int(message[2:].strip())
@@ -65,18 +139,6 @@ class WebSocketClient:
                     aes_iv.hex() if aes_iv else None
                 )
                 self.message_queue.put("[Key Exchange Successful]")
-                
-                # Subscribe to both topics
-                if self.topic1 and self.topic2:
-                    ws.send(f"subscribe:{self.topic1}")
-                    ws.send(f"subscribe:{self.topic2}")
-                    self.message_queue.put(f"[Subscribed to topics: '{self.topic1}', '{self.topic2}']")
-                elif self.topic1:
-                    ws.send(f"subscribe:{self.topic1}")
-                    self.message_queue.put(f"[Subscribed to topic: '{self.topic1}']")
-                elif self.topic2:
-                    ws.send(f"subscribe:{self.topic2}")
-                    self.message_queue.put(f"[Subscribed to topic: '{self.topic2}']")
 
             elif message.startswith("data:"):
                 # Format: "data: topic <base64-encrypted-data>"
@@ -90,14 +152,16 @@ class WebSocketClient:
                 
                 # Decrypt the message
                 decrypted = self.crypto.decrypt_aes_128_cbc(encrypted_data)
+
                 
-                # Determine which topic this belongs to
-                if topic_received == self.topic1:
+                #Determine which topic this belongs to
+                if topic_received == Topic1:
                     self.message_queue.put((1, f"{topic_received}: {decrypted}"))
-                elif topic_received == self.topic2:
+                elif topic_received == Topic2:
                     self.message_queue.put((2, f"{topic_received}: {decrypted}"))
                 else:
                     self.message_queue.put(f"[WARNING] Received message for unknown topic: {topic_received}")
+                #self.message_queue.put(f"[{topic_received}]: {decrypted}")
             else:
                 self.message_queue.put(f"[Raw Message]: {message}")
         except Exception as e:

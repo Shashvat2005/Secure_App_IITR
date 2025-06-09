@@ -95,19 +95,32 @@ class SecureChatApp:
         ttk.Label(conn_frame, text="WebSocket Server:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         self.server_entry = ttk.Entry(conn_frame, width=40, font=("Segoe UI", 10))
         self.server_entry.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
-        self.server_entry.insert(0, "ws://192.168.68.131:8887")
+        self.server_entry.insert(0, "ws://192.168.210.131:8887")
         
         # Topic subscriptions
         ttk.Label(conn_frame, text="Topic 1:").grid(row=0, column=2, sticky="w", padx=(20, 5), pady=5)
         self.topic1_entry = ttk.Entry(conn_frame, width=20, font=("Segoe UI", 10))
         self.topic1_entry.grid(row=0, column=3, sticky="ew", padx=5, pady=5)
-        self.topic1_entry.insert(0, "sensor/temperature")
+        self.topic1_entry.insert(0, 'sensor/temperature')
+
+        # Subscribe button for topic 1
+        ttk.Button(conn_frame, text="Subscribe",
+                   command=lambda: self.ws_client.subscribe(self.topic1_entry.get().strip(), 1),
+                   style="TButton").grid(row=1, column=3, sticky="ew", padx=(5, 10), pady=5)
         
+
+        # Topic 2 subscription
         ttk.Label(conn_frame, text="Topic 2:").grid(row=0, column=4, sticky="w", padx=(20, 5), pady=5)
         self.topic2_entry = ttk.Entry(conn_frame, width=20, font=("Segoe UI", 10))
         self.topic2_entry.grid(row=0, column=5, sticky="ew", padx=5, pady=5)
-        self.topic2_entry.insert(0, "sensor/humidity")
+        self.topic2_entry.insert(0, 'sensor/humidity')
+
+        # Subscribe button for topic 2
+        ttk.Button(conn_frame, text="Subscribe",
+                   command=lambda: self.ws_client.subscribe(self.topic2_entry.get().strip(), 2),
+                   style="TButton").grid(row=1, column=5, sticky="ew", padx=(5, 10), pady=5)
         
+
         # Status indicator
         ttk.Label(conn_frame, text="Status:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
         self.status_label = ttk.Label(conn_frame, text="Disconnected", foreground="#e74c3c")
@@ -342,16 +355,11 @@ class SecureChatApp:
             return
 
         server_url = self.server_entry.get().strip()
-        topic1 = self.topic1_entry.get().strip()
-        topic2 = self.topic2_entry.get().strip()
         
         if not server_url:
             messagebox.showerror("Error", "Please enter a valid WebSocket URL")
             return
             
-        # if not topic1 or not topic2:
-        #     messagebox.showerror("Error", "Please enter both topics")
-        #     return
 
         self.update_status("Connecting...", "#f39c12")
         self.ws_client = WebSocketClient(
@@ -359,8 +367,6 @@ class SecureChatApp:
             message_queue=self.message_queue,
             status_callback=self.update_status,
             key_callback=self.update_key_info,
-            topic1=topic1,
-            topic2=topic2
         )
         
         self.ws_thread = threading.Thread(target=self.ws_client.run)
@@ -377,9 +383,5 @@ class SecureChatApp:
             self.message_queue.put("[WebSocket Connection Closed]")
             self.connect_btn.config(state=tk.NORMAL)
             self.disconnect_btn.config(state=tk.DISABLED)
-        if self.ws_client and self.ws_client.is_connected:
-            self.ws_client.close()
-            self.update_status("Disconnected", "#e74c3c")
-            self.message_queue.put("[WebSocket Connection Closed]")
-            self.connect_btn.config(state=tk.NORMAL)
-            self.disconnect_btn.config(state=tk.DISABLED)
+
+
