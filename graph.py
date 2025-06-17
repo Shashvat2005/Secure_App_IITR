@@ -6,7 +6,7 @@ from collections import deque
 import threading
 
 class MessageGraph:
-    def __init__(self, parent_frame, max_points=50, update_interval=500):
+    def __init__(self, parent_frame, max_points=100, update_interval=500):
         self.parent = parent_frame
         self.max_points = max_points
         self.update_interval = update_interval

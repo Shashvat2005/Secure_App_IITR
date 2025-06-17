@@ -5,6 +5,9 @@ import threading
 from websocket_client import WebSocketClient
 from graph import MessageGraph
 
+
+cipher_var = None
+
 class SecureChatApp:
     def __init__(self, master):
         self.master = master
@@ -33,6 +36,7 @@ class SecureChatApp:
         # Message graphs
         self.topic1_graph = MessageGraph(self.topic1_graph_frame)
         self.topic2_graph = MessageGraph(self.topic2_graph_frame)
+
 
     def _configure_styles(self):
         self.style.configure("Header.TLabel", 
@@ -95,13 +99,13 @@ class SecureChatApp:
         ttk.Label(conn_frame, text="WebSocket Server:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         self.server_entry = ttk.Entry(conn_frame, width=40, font=("Segoe UI", 10))
         self.server_entry.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
-        self.server_entry.insert(0, "ws://192.168.210.131:8887")
+        self.server_entry.insert(0, "ws://192.168.97.131:8887")
         
         # Topic subscriptions
         ttk.Label(conn_frame, text="Topic 1:").grid(row=0, column=2, sticky="w", padx=(20, 5), pady=5)
         self.topic1_entry = ttk.Entry(conn_frame, width=20, font=("Segoe UI", 10))
         self.topic1_entry.grid(row=0, column=3, sticky="ew", padx=5, pady=5)
-        self.topic1_entry.insert(0, 'sensor/temperature')
+        self.topic1_entry.insert(0, 'hi')
 
         # Subscribe button for topic 1
         ttk.Button(conn_frame, text="Subscribe",
@@ -113,7 +117,7 @@ class SecureChatApp:
         ttk.Label(conn_frame, text="Topic 2:").grid(row=0, column=4, sticky="w", padx=(20, 5), pady=5)
         self.topic2_entry = ttk.Entry(conn_frame, width=20, font=("Segoe UI", 10))
         self.topic2_entry.grid(row=0, column=5, sticky="ew", padx=5, pady=5)
-        self.topic2_entry.insert(0, 'sensor/humidity')
+        self.topic2_entry.insert(0, 'esp32/data')
 
         # Subscribe button for topic 2
         ttk.Button(conn_frame, text="Subscribe",
@@ -129,6 +133,16 @@ class SecureChatApp:
         # Key information
         key_frame = ttk.Frame(conn_frame)
         key_frame.grid(row=2, column=0, columnspan=6, sticky="ew", pady=10)
+
+        global cipher_var
+        self.cipher_options = ["AES", "Vigenère Cipher", "Playfair Cipher", "Transposition Cipher", "Ceasar Cipher", "AES", "Vigenère Cipher Full", "Playfair Cipher Full", "Transposition Cipher Full"]
+        cipher_var = tk.StringVar(value=self.cipher_options[0])  # Default selection
+
+        self.cipher_label = ttk.Label(conn_frame, text="Cipher:")
+        self.cipher_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        self.cipher_dropdown = ttk.OptionMenu(conn_frame, cipher_var, *self.cipher_options)
+        self.cipher_dropdown.grid(row=1, column=1, padx=5, pady=5, sticky="w")
+        #print("set:", cipher_var.get())
         
         ttk.Label(key_frame, text="Shared Key:").pack(side="left", padx=(0, 5))
         self.shared_key_label = ttk.Label(key_frame, text="Not established", style="KeyInfo.TLabel")
@@ -240,7 +254,6 @@ class SecureChatApp:
         else:
             self.topic2_graph_frame = graph_frame
     
-    
     def _create_message_area(self):
         msg_frame = ttk.LabelFrame(self.master, text="Received Messages", style="MessageFrame.TLabelframe", padding=10)
         msg_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
@@ -261,7 +274,6 @@ class SecureChatApp:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.text_area.config(yscrollcommand=scrollbar.set)
         self.text_area.config(state=tk.DISABLED)
-
 
     def _create_status_bar(self):
         self.status_bar = ttk.Label(self.master, 
@@ -359,14 +371,16 @@ class SecureChatApp:
         if not server_url:
             messagebox.showerror("Error", "Please enter a valid WebSocket URL")
             return
-            
-
+        
+        global cipher_var
+        print(cipher_var)
         self.update_status("Connecting...", "#f39c12")
         self.ws_client = WebSocketClient(
             url=server_url,
             message_queue=self.message_queue,
             status_callback=self.update_status,
             key_callback=self.update_key_info,
+            cipher_var=cipher_var
         )
         
         self.ws_thread = threading.Thread(target=self.ws_client.run)
