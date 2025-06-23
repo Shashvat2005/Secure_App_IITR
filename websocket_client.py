@@ -32,6 +32,22 @@ class WebSocketClient:
         self.password = None  # Password for authentication, if needed
         self.cipher_var = cipher_var
 
+    def log_data(self, data:str):
+        """
+        Log data to a CSV file
+        data: The data to log
+        """
+        if self.file and self.writer: # Check if file and writer are initialized
+            # Log the data into the CSV file
+            time1 = t.time() # Get the current time
+            try:
+                row = [time1] + list(data) # Create a row with the current time and data
+                self.writer.writerow(row) # Write the row to the CSV file
+            except ValueError as e:
+                pass
+        else:
+            logger.error("File or writer not initialized for logging.")   
+
     def subscribe(self, topic, no): # Handle Subscription to multiple topics
         """
         Subscribe to a topic
@@ -108,7 +124,7 @@ class WebSocketClient:
             self.message_queue.put("[ERROR] Not connected to WebSocket server")     # Show error message if not connected
             return # Exit the function if not connected
         
-    def run(self):
+    def run(self): #Run the websocket connection
         """Start the WebSocket connection"""
         try:
             # Open the file once when the connection starts
@@ -135,15 +151,15 @@ class WebSocketClient:
             if self.file:
                 self.file.close()
 
-    def close(self):
+    def close(self): #Close the websocket connection
         """Close the WebSocket connection and the file"""
-        if self.ws and self.is_connected:
-            self.ws.close()
-            self.is_connected = False
-        if self.file:
-            self.file.close()
+        if self.ws and self.is_connected: # Check if WebSocket is connected
+            self.ws.close() # Close the WebSocket connection
+            self.is_connected = False # Update connection status
+        if self.file: # Check if the file is open
+            self.file.close() # Close the file to ensure data is saved
 
-    def _on_message(self, ws, message):
+    def _on_message(self, ws, message): # Handle incoming messages
         """Handle incoming messages"""
         global Topic2, Topic1 # Global variables to track topics
 
@@ -152,7 +168,7 @@ class WebSocketClient:
             if message.startswith("type:"):
                 # Format: "type: <type of encryption>"
                 self.type_of_encryption = message[5:].strip() # Extract type of encryption
-                print(f"Type of encryption: {self.type_of_encryption}") # Debug message for type of encryption
+                #print(f"Type of encryption: {self.type_of_encryption}") # Debug message for type of encryption
 
             if self.type_of_encryption == "1": #Shift cipher
                 if message.startswith("shift:"):
@@ -166,22 +182,19 @@ class WebSocketClient:
                         return # Exit the function if the message format is invalid
                     
                     encrypted_data = parts[2].strip() # Extract encrypted data from the message
+                    print("Encrypted Message:", encrypted_data) # Debug message for encrypted data
 
                     # Decrypt the message using Caesar cipher
                     decrypted = self.crypto.shift_cipher(str(b64decode(encrypted_data).decode('utf-8')).strip(), self.cipher_shift) # Decrypt the message using Caesar cipher
-                    self.message_queue.put(f"[Decrypted message: {decrypted}]") # Show message for decrypted message
-                    print(f"Decrypted message: {decrypted}") # Debug message for decrypted message
+                    #self.message_queue.put((1, f"[Decrypted message: {decrypted}]"))
+                    if (parts[1] == Topic1):
+                        self.message_queue.put((1, f"[Decrypted message: {decrypted}]")) # Show message for decrypted message
+                    else:
+                        self.message_queue.put((2, f"[Decrypted message: {decrypted}]"))
+                    #print(f"Decrypted message: {decrypted}") # Debug message for decrypted message
 
-                    # Write header if the file is empty
-                    if self.file.tell() == 0:
-                        a = ['Timestamp']
-                        for i in decrypted.values():
-                            a.append(i)
-                        self.writer.writerow(a)
-                    
-                    # Log the data into the CSV file
-                    time1 = t.time()
-                    self.writer.writerow([time1, decrypted[a[0]], decrypted[a[1]], decrypted[a[2]], decrypted[a[3]]])
+                    # Write data into file
+                    #self.log_data(decrypted)
             
             elif self.type_of_encryption == "2": # AES
 
@@ -204,93 +217,81 @@ class WebSocketClient:
                     )
                     # Notify UI about new keys
                     self.key_callback(
-                        shared_key.hex() if shared_key else None,
-                        aes_iv.hex() if aes_iv else None
+                        shared_key.hex() if shared_key else None, # Convert shared key to hex format
+                        aes_iv.hex() if aes_iv else None # Convert AES IV to hex format
                     )
-                    self.message_queue.put("[Key Exchange Successful]")
+                    self.message_queue.put("[Key Exchange Successful]") # Show message for key exchange successful
 
-                elif message.startswith("data:"):
+                elif message.startswith("data:"): 
                     # Format: "data: topic <base64-encrypted-data>"
-                    parts = message.split(" ", 2) #
+                    parts = message.split(" ", 2) # Split the message into parts
                     if len(parts) < 3:
-                        self.message_queue.put(f"[ERROR] Invalid message format: {message}")
-                        return
+                        self.message_queue.put(f"[ERROR] Invalid message format: {message}") # Show error message if the message format is invalid
+                        return # Exit the function if the message format is invalid
+                
+                    encrypted_data = parts[2].strip() # Extract encrypted data from the message
+                    print("Encrypted Message:", encrypted_data)  # Debug message for encrypted data
                     
-                    #self.message_queue.put(f"Logging data in file and printing in terminal")
-                    encrypted_data = parts[2].strip()
-                    
-                    # Decrypt the message
-                    decrypted = self.crypto.decrypt_aes_128_cbc(encrypted_data)
+                    decrypted = self.crypto.decrypt_aes_128_cbc(encrypted_data) # Decrypt the message using AES 128 CBC
 
-                    print(f"Decrypted message: {decrypted}")
-                    if type(decrypted) is not dict:
-                        time1 = t.time()
-                        self.writer.writerow([time1, decrypted])
+                    if (parts[1] == Topic1):
+                        self.message_queue.put((1, f"[Decrypted message: {decrypted}]")) # Show message for decrypted message
                     else:
-                        if self.file.tell() == 0:
-                            a = ['Timestamp']
-                            for i in decrypted.values():
-                                a.append(i)
-                            self.writer.writerow(a)
-                        
-                        # Log the data into the CSV file
-                        time1 = t.time()
-                        self.writer.writerow([time1, decrypted[a[0]], decrypted[a[1]], decrypted[a[2]], decrypted[a[3]]])
-                    #print(f"Logged message: {time1}, {decrypted}")
+                        self.message_queue.put((2, f"[Decrypted message: {decrypted}]")) 
+
+                    self.log_data(decrypted) # Write data into file
                 else:
                     self.message_queue.put(f"[Raw Message]: {message}")
             
             elif self.type_of_encryption == "3": # Vigenere cipher
                 if message.startswith("VCKey:"):
                     # Format: "key: <encryption key>"
-                    self.decryption_key = message[6:].strip()
-                    #self.decryption_key = self.crypto.dh_key_to_string(self.decryption_key, 7)  # Ensure key is in string format
-                    self.message_queue.put(f"[Received Vigenère cipher key: {self.decryption_key}]")
-                elif message.startswith("data:"):
-                    parts = message.split(" ", 2)
-                    if len(parts) < 3:
-                        self.message_queue.put(f"[ERROR] Invalid message format: {message}")
+                    self.decryption_key = message[6:].strip() # Extract Vigenère cipher key
+                    self.message_queue.put(f"[Received Vigenère cipher key: {self.decryption_key}]") # Show message for received Vigenère cipher key
+                elif message.startswith("data:"): 
+                    parts = message.split(" ", 2) # Split the message into parts
+                    if len(parts) < 3: 
+                        self.message_queue.put(f"[ERROR] Invalid message format: {message}") # Show error message if the message format is invalid
                         return
                     
-                    encrypted_data = parts[2].strip()
-                    print(encrypted_data)
+                    encrypted_data = parts[2].strip() # Extract encrypted data from the message
+                    
+                    print(f"Encrypted data: {encrypted_data}")  # Debug message for encrypted data
+
                     # Decrypt the message using Vigenère cipher
                     decrypted = self.crypto.vigenere_decrypt(str(b64decode(encrypted_data).decode('utf-8')).strip(), self.decryption_key)
-                    print(f"Decrypted message: {decrypted}")
-                    if self.file.tell() == 0:
-                        a = ['Timestamp']
-                        for i in decrypted.values():
-                            a.append(i)
-                        self.writer.writerow(a)
+
+                    if (parts[1] == Topic1):
+                        self.message_queue.put((1, f"[Decrypted message: {decrypted}]")) # Show message for decrypted message
+                    else:
+                        self.message_queue.put((2, f"[Decrypted message: {decrypted}]")) 
                     
-                    # Log the data into the CSV file
-                    time1 = t.time()
-                    self.writer.writerow([time1, decrypted[a[0]], decrypted[a[1]], decrypted[a[2]], decrypted[a[3]]])
+                    self.log_data(decrypted)
             
             elif self.type_of_encryption == "4": # Transposition cipher
-                if message.startswith("TCKey:"):
+                if message.startswith("TCKey:"): 
                     # Format: "key: <encryption key>"
-                    self.decryption_key = message[6:].strip()
-                    self.message_queue.put(f"[Received Transposition cipher key: {self.decryption_key}]")
+                    self.decryption_key = message[6:].strip() # Get the Transposition cipher key
+                    self.message_queue.put(f"[Received Transposition cipher key: {self.decryption_key}]") # Show message for received Transposition cipher key
 
-                elif message.startswith("data:"):
-                    parts = message.split(" ", 2)
+                elif message.startswith("data:"): 
+                    parts = message.split(" ", 2) # Split the message into parts
                     if len(parts) < 3:
-                        self.message_queue.put(f"[ERROR] Invalid message format: {message}")
-                        return
+                        self.message_queue.put(f"[ERROR] Invalid message format: {message}") # Show error message if the message format is invalid
+                        return # Exit the function if the message format is invalid
                     
-                    encrypted_data = parts[2].strip()
+                    encrypted_data = parts[2].strip() # Extract encrypted data from the message
+                    print(f"Encrypted data: {encrypted_data}")  # Debug message for encrypted data
+
+                    # Decrypt the message using Transposition cipher
                     decrypted = self.crypto.decrypt_transposition(str(b64decode(encrypted_data).decode('utf-8')).strip(), self.decryption_key)
-                    print(f"Decrypted message: {decrypted}")
-                    if self.file.tell() == 0:
-                        a = ['Timestamp']
-                        for i in decrypted.values():
-                            a.append(i)
-                        self.writer.writerow(a)
-                    
-                    # Log the data into the CSV file
-                    time1 = t.time()
-                    self.writer.writerow([time1, decrypted[a[0]], decrypted[a[1]], decrypted[a[2]], decrypted[a[3]]])
+                    if (parts[1] == Topic1):
+                        self.message_queue.put((1, f"[Decrypted message: {decrypted}]")) # Show message for decrypted message
+                    else:
+                        self.message_queue.put((2, f"[Decrypted message: {decrypted}]"))
+                    #print(f"Decrypted message: {decrypted}")
+                    # Write data into file
+                    self.log_data(decrypted)
 
             elif self.type_of_encryption == "5": # Playfair cipher
                 if message.startswith("PFCKey:"):
@@ -304,21 +305,19 @@ class WebSocketClient:
                         return
                     #self.decryption_key = self.crypto.dh_key_to_string(self.decryption_key, 6)  # Ensure key is in string format
                     encrypted_data = parts[2].strip()
-                    #print(f"Encrypted data: {encrypted_data}")
+                    print(f"Encrypted data: {encrypted_data}")
 
                     # Decrypt the message using Playfair cipher
                     decrypted = self.crypto.playfair_decrypt(str(b64decode(encrypted_data).decode('utf-8')).strip(), self.decryption_key)
 
-                    print(f"Decrypted message: {decrypted}")
-                    if self.file.tell() == 0:
-                        a = ['Timestamp']
-                        for i in decrypted.values():
-                            a.append(i)
-                        self.writer.writerow(a)
-                    
-                    # Log the data into the CSV file
-                    time1 = t.time()
-                    self.writer.writerow([time1, decrypted[a[0]], decrypted[a[1]], decrypted[a[2]], decrypted[a[3]]])
+                    if (parts[1] == Topic1):
+                        self.message_queue.put((1, f"[Decrypted message: {decrypted}]")) # Show message for decrypted message
+                    else:
+                        self.message_queue.put((2, f"[Decrypted message: {decrypted}]"))
+
+                    #print(f"Decrypted message: {decrypted}")
+                    # Write data into file
+                    self.log_data(decrypted)
         
             elif self.type_of_encryption == "6": # Vigenère cipher full
                 if message.startswith("VCAKey:"):
@@ -332,17 +331,15 @@ class WebSocketClient:
                         return
                     
                     encrypted_data = parts[2].strip()
+                    print(f"Encrypted data: {encrypted_data}")  # Debug message for encrypted data
                     decrypted = self.crypto.vigenere_decrypt_full(str(b64decode(encrypted_data).decode('utf-8')).strip(), self.decryption_key)
-                    print(f"Decrypted message: {decrypted}")
-                    if self.file.tell() == 0:
-                        a = ['Timestamp']
-                        for i in decrypted.values():
-                            a.append(i)
-                        self.writer.writerow(a)
-                    
-                    # Log the data into the CSV file
-                    time1 = t.time()
-                    self.writer.writerow([time1, decrypted[a[0]], decrypted[a[1]], decrypted[a[2]], decrypted[a[3]]])
+                    if (parts[1] == Topic1):
+                        self.message_queue.put((1, f"[Decrypted message: {decrypted}]")) # Show message for decrypted message
+                    else:
+                        self.message_queue.put((2, f"[Decrypted message: {decrypted}]"))
+                    #print(f"Decrypted message: {decrypted}")
+                    # Write data into file
+                    self.log_data(decrypted)
         
             elif self.type_of_encryption == "7": # Transposition cipher full
                 if message.startswith("TCAKey:"):
@@ -357,17 +354,15 @@ class WebSocketClient:
                         return
                     
                     encrypted_data = parts[2].strip()
+                    print(f"Encrypted data: {encrypted_data}")  # Debug message for encrypted data
                     decrypted = self.crypto.transposition_decrypt_base64(str(encrypted_data).strip(), self.decryption_key)
-                    print(f"Decrypted message: {decrypted}")
-                    if self.file.tell() == 0:
-                        a = ['Timestamp']
-                        for i in decrypted.values():
-                            a.append(i)
-                        self.writer.writerow(a)
-                    
-                    # Log the data into the CSV file
-                    time1 = t.time()
-                    self.writer.writerow([time1, decrypted[a[0]], decrypted[a[1]], decrypted[a[2]], decrypted[a[3]]])
+                    if (parts[1] == Topic1):
+                        self.message_queue.put((1, f"[Decrypted message: {decrypted}]")) # Show message for decrypted message
+                    else:
+                        self.message_queue.put((2, f"[Decrypted message: {decrypted}]"))
+                    #print(f"Decrypted message: {decrypted}")
+                    # Write data into file
+                    self.log_data(decrypted)
         
             elif self.type_of_encryption == "8": # Playfair cipher full
                 if message.startswith("PFCAKey:"):
@@ -381,21 +376,19 @@ class WebSocketClient:
                         return
                     #self.decryption_key = self.crypto.dh_key_to_string(self.decryption_key, 6)  # Ensure key is in string format
                     encrypted_data = parts[2].strip()
-                    #print(f"Encrypted data: {encrypted_data}")
+                    print(f"Encrypted data: {encrypted_data}")
 
                     # Decrypt the message using Playfair cipher
                     decrypted = self.crypto.decrypt_playfair_full(str(b64decode(encrypted_data).decode('utf-8')).strip(), self.decryption_key)
 
-                    print(f"Decrypted message: {decrypted}")
-                    if self.file.tell() == 0:
-                        a = ['Timestamp']
-                        for i in decrypted.values():
-                            a.append(i)
-                        self.writer.writerow(a)
-                    
-                    # Log the data into the CSV file
-                    time1 = t.time()
-                    self.writer.writerow([time1, decrypted[a[0]], decrypted[a[1]], decrypted[a[2]], decrypted[a[3]]])
+                    if (parts[1] == Topic1):
+                        self.message_queue.put((1, f"[Decrypted message: {decrypted}]")) # Show message for decrypted message
+                    else:
+                        self.message_queue.put((2, f"[Decrypted message: {decrypted}]"))
+
+                    #print(f"Decrypted message: {decrypted}")
+                    # Write data into file
+                    self.log_data(decrypted)
         
             else: # Unknown encryption type
                 self.message_queue.put(f"[Unknown Encryption Type] {self.type_of_encryption}")
@@ -404,26 +397,25 @@ class WebSocketClient:
         except Exception as e: # Processing Error
             self.message_queue.put(f"[Processing Error] {str(e)}")
 
-    def _on_error(self, ws, error):
+    def _on_error(self, ws, error): # Handle errors
         self.message_queue.put(f"[WebSocket Error] {error}")
         self.status_callback(f"Error: {error}", "#c0392b")
 
-    def _on_close(self, ws, close_status_code, close_msg):
+    def _on_close(self, ws, close_status_code, close_msg): # Handle connection close
         self.is_connected = False
         self.message_queue.put(f"[Connection Closed] Code: {close_status_code}, Message: {close_msg}")
         self.status_callback("Disconnected", "#7f8c8d")
 
-    def _on_open(self, ws):
+    def _on_open(self, ws): # Handle connection open
         self.is_connected = True
         self.message_queue.put("[Connected to WebSocket Server]")
 
         encryption = self.cipher_var.get()
-        print(encryption)
         mapping = {"AES" : 2, "Vigenère Cipher" : 3, "Playfair Cipher" : 5, "Transposition Cipher" : 4, "Ceasar Cipher" : 1,
                    "Vigenère Cipher Full": 6, "Playfair Cipher Full": 8, "Transposition Cipher Full": 7}
         self.type_of_encryption = str(mapping.get(encryption, 2))  # Default to AES if not found
         print(self.type_of_encryption)
         self.ws.send(f"type: {self.type_of_encryption}")
-        print("sent encryption type")
 
         self.status_callback("Connected", "#27ae60")
+

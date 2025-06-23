@@ -1,10 +1,10 @@
+from collections import defaultdict
 import tkinter as tk
 from tkinter import ttk, messagebox
 import queue
 import threading
 from websocket_client import WebSocketClient
 from graph import MessageGraph
-
 
 cipher_var = None
 
@@ -36,7 +36,6 @@ class SecureChatApp:
         # Message graphs
         self.topic1_graph = MessageGraph(self.topic1_graph_frame)
         self.topic2_graph = MessageGraph(self.topic2_graph_frame)
-
 
     def _configure_styles(self):
         self.style.configure("Header.TLabel", 
@@ -99,7 +98,7 @@ class SecureChatApp:
         ttk.Label(conn_frame, text="WebSocket Server:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         self.server_entry = ttk.Entry(conn_frame, width=40, font=("Segoe UI", 10))
         self.server_entry.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
-        self.server_entry.insert(0, "ws://192.168.97.131:8887")
+        self.server_entry.insert(0, "ws://192.168.0.2:8887")
         
         # Topic subscriptions
         ttk.Label(conn_frame, text="Topic 1:").grid(row=0, column=2, sticky="w", padx=(20, 5), pady=5)
@@ -117,7 +116,7 @@ class SecureChatApp:
         ttk.Label(conn_frame, text="Topic 2:").grid(row=0, column=4, sticky="w", padx=(20, 5), pady=5)
         self.topic2_entry = ttk.Entry(conn_frame, width=20, font=("Segoe UI", 10))
         self.topic2_entry.grid(row=0, column=5, sticky="ew", padx=5, pady=5)
-        self.topic2_entry.insert(0, 'esp32/data')
+        self.topic2_entry.insert(0, 'test')
 
         # Subscribe button for topic 2
         ttk.Button(conn_frame, text="Subscribe",
@@ -308,10 +307,15 @@ class SecureChatApp:
         try:
             # Extract the numeric part after the colon
             value_part = message.split(":", 1)[1].strip() if ":" in message else message
+
+            #print(f"Value part extracted for graphing: {value_part}")  # Debug for graph not working
+            #print(f"Type of value_part: {type(value_part)}")  # Debug for graph not working
+        
             numeric_value = float(value_part)
             graph.add_data_point(numeric_value)
-        except (ValueError, IndexError):
+        except (ValueError, IndexError) as e:
             # Not a numeric value, skip graphing
+            #print(f"Skipping graphing for non-numeric message: {message}, Error:({e})") # Debug for graph not working
             pass
 
     def clear_messages(self):
@@ -373,7 +377,7 @@ class SecureChatApp:
             return
         
         global cipher_var
-        print(cipher_var)
+        #print(cipher_var)
         self.update_status("Connecting...", "#f39c12")
         self.ws_client = WebSocketClient(
             url=server_url,
@@ -399,3 +403,22 @@ class SecureChatApp:
             self.disconnect_btn.config(state=tk.DISABLED)
 
 
+
+word = "dabdcbdcdcd"
+k = 2
+
+d,g = {},{}
+
+for i in word:
+    if i in d:
+        d[i] += 1
+    else:
+        d[i] = 1
+
+rem = 0
+c = sorted(d)
+for i in c:
+    g[i] = d[i]
+
+for j in g:
+    pass

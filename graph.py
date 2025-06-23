@@ -70,3 +70,4 @@ class MessageGraph:
         self.running = False
         if self.update_thread.is_alive():
             self.update_thread.join(timeout=1.0)
+

@@ -1,6 +1,6 @@
 import hashlib
 import secrets
-from base64 import b64decode, b64encode
+from base64 import b64decode
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
@@ -10,61 +10,63 @@ import base64
 
 class CryptoHandler:
     def __init__(self):
-        self.private_key = None
-        self.public_key = None
-        self.shared_key = None
-        self.aes_iv = None
-        self.p = None
-        self.g = None
-        self.cipher = None
+        self.private_key = None # Private key for Diffie-Hellman
+        self.public_key = None  # Public key for Diffie-Hellman
+        self.shared_key = None  # Shared secret key derived from Diffie-Hellman
+        self.aes_iv = None      # Initialization vector for AES
+        self.p = None           # Prime number for Diffie-Hellman
+        self.g = None           # Generator for Diffie-Hellman
+        self.cipher = None      # AES cipher object
 
     def pow_dh(self, base, exponent, modulus):
         """Efficient modular exponentiation"""
-        return pow(base, exponent, modulus)
+        return pow(base, exponent, modulus) 
 
     def generate_public_key(self, p, g):
         """Generate public key using DH parameters"""
-        self.private_key = secrets.randbits(256)
-        self.public_key = self.pow_dh(g, self.private_key, p)
+        self.private_key = secrets.randbits(256) # Generate a random private key
+        self.public_key = self.pow_dh(g, self.private_key, p) # Diffie-Hellman public key
         return self.public_key
 
     def generate_shared_secret(self, p, server_public_key):
         """Generate shared secret from server's public key"""
-        shared_key_unhash = self.pow_dh(server_public_key, self.private_key, p)
-        shared_key_bytes = shared_key_unhash.to_bytes(
+        shared_key_unhash = self.pow_dh(server_public_key, self.private_key, p) # Diffie-Hellman shared secret
+        # Convert shared key to bytes and hash it to derive AES key and IV
+        shared_key_bytes = shared_key_unhash.to_bytes( 
             (shared_key_unhash.bit_length() + 7) // 8, 
             byteorder='big'
         )
-        shared_key_hashed = hashlib.sha256(shared_key_bytes).digest()
+        shared_key_hashed = hashlib.sha256(shared_key_bytes).digest() # Hash the shared key to get a fixed-length key
         
-        self.shared_key = shared_key_hashed[:16]
-        self.aes_iv = shared_key_hashed[16:]
+        self.shared_key = shared_key_hashed[:16] # Use first 16 bytes for AES-128 key
+        self.aes_iv = shared_key_hashed[16:] # Use next 16 bytes for AES IV
 
+        # Initialize AES cipher in CBC mode with the derived key and IV
         self.cipher = Cipher(
                 algorithms.AES(self.shared_key), 
                 modes.CBC(self.aes_iv), 
                 backend=default_backend()
-            )
+            ) 
         
         return self.shared_key, self.aes_iv
 
     def decrypt_aes_128_cbc(self, ciphertext_b64):
         """Decrypt AES-128-CBC encrypted message"""
         try:
-            ciphertext = b64decode(ciphertext_b64)
-            key = self.shared_key
-            iv = self.aes_iv
+            ciphertext = b64decode(ciphertext_b64) # Decode base64 ciphertext
+            key = self.shared_key # AES key derived from Diffie-Hellman
+            iv = self.aes_iv    # AES IV derived from Diffie-Hellman
             
             if not key or not iv:
                 raise ValueError("Encryption keys not established")
                 
-            decryptor = self.cipher.decryptor()
-            padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
+            decryptor = self.cipher.decryptor() # Create AES decryptor
+            padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize() # Finalize decryption
             
-            unpadder = padding.PKCS7(128).unpadder()
-            plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
+            unpadder = padding.PKCS7(128).unpadder() # Create unpadder for PKCS7 padding
+            plaintext = unpadder.update(padded_plaintext) + unpadder.finalize() # Remove padding
             
-            return plaintext.decode('utf-8')
+            return plaintext.decode('utf-8') # Return decrypted plaintext as string
         except Exception as e:
             raise ValueError(f"Decryption failed: {str(e)}")
         
@@ -204,14 +206,12 @@ class CryptoHandler:
 
         return cleaned
 
-
     # These implementations handle alpha-numeric data in decryption for various ciphers
 
     def vigenere_decrypt_full(self, ciphertext, key):
         charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789."
         char_len = len(charset)
 
-        # Expand the key to match only the valid positions in ciphertext (skip symbols)
         filtered_key = []
         key_index = 0
 
@@ -220,7 +220,7 @@ class CryptoHandler:
                 filtered_key.append(key[key_index % len(key)])
                 key_index += 1
             else:
-                filtered_key.append(None)  # Placeholder for symbol
+                filtered_key.append(None)
 
         decrypted = []
 
@@ -231,7 +231,7 @@ class CryptoHandler:
                 decrypted_char = charset[(c_idx - k_idx) % char_len]
                 decrypted.append(decrypted_char)
             else:
-                decrypted.append(c)  # Keep non-charset characters (symbols) as-is
+                decrypted.append(c)
 
         return ''.join(decrypted)
 
@@ -241,7 +241,7 @@ class CryptoHandler:
 
         def get_key_order(k):
             indexed = list(enumerate(k))
-            sorted_key = sorted(indexed, key=lambda x: (x[1], x[0]))  # stable sort
+            sorted_key = sorted(indexed, key=lambda x: (x[1], x[0]))
             order = [i for i, _ in sorted_key]
             return order
 
@@ -254,12 +254,10 @@ class CryptoHandler:
 
         key_order = get_key_order(key)
 
-        # Invert key order: column index → its position in sorted key order
         col_pos_map = [0] * num_cols
         for sorted_pos, original_index in enumerate(key_order):
             col_pos_map[original_index] = sorted_pos
 
-        # Create grid
         grid = [[''] * num_cols for _ in range(num_rows)]
         k = 0
         for col_sorted_index in range(num_cols):
@@ -269,10 +267,8 @@ class CryptoHandler:
                     grid[row][col] = cipher_text[k]
                     k += 1
 
-        # Read out row-wise
         plaintext = ''.join(grid[r][c] for r in range(num_rows) for c in range(num_cols))
 
-        # Trim trailing padding X's
         return plaintext.rstrip('X')
 
     def decrypt_playfair_full(self, ciphertext, key):
@@ -337,3 +333,5 @@ class CryptoHandler:
                 plaintext.append(matrix[row_b][col_a])
 
         return remove_padding(''.join(plaintext))
+
+
